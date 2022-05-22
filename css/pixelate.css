@@ -1,0 +1,41 @@
+@font-face{
+	font-family : eagle;
+	src : url(/fonts/eagle.ttf);
+}
+
+.pixcontainer {
+	position:relative;
+	width: 200px;
+	margin: 0 20px  0;
+	float : right ;
+}
+
+.pixcontainer img{
+	transition:1s;
+}
+
+.pixcontainer img:first-child:hover{
+	opacity:0;
+}
+
+.pixcontainer .funi .shame{
+	display:none;
+}
+
+.pixcontainer img:hover ~ .funi .smug{
+	display:none;
+}
+
+.pixcontainer img:hover ~ .funi .shame{
+	display:inline;
+}
+
+@media (max-width: 100em){
+	.pixcontainer {
+		float : none;
+		margin-left : auto;
+		margin-right : auto;
+		margin-bottom: 1.5em;
+		margin-top: 1em;
+	}
+}

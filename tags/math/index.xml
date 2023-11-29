@@ -1,57 +1,33 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?>
-<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
-  <channel>
-    <title>math on CortexAuth</title>
-    <link>https://thiazikara.github.io/tags/math/</link>
-    <description>CortexAuth (math)</description>
-    <generator>Hugo -- gohugo.io</generator>
-    <language>en-us</language>
-    <lastBuildDate>Fri, 07 Apr 2023 00:00:00 +0000</lastBuildDate>
-    
-    <atom:link href="https://thiazikara.github.io/tags/math/index.xml" rel="self" type="application/rss+xml" />
-    
-    
-    <item>
-      <title>Impossibility of Distributed Consensus with one faulty process</title>
-      <link>https://thiazikara.github.io/post/flp/</link>
-      <pubDate>Fri, 07 Apr 2023 00:00:00 +0000</pubDate>
-      
-      <guid>https://thiazikara.github.io/post/flp/</guid>
-      <description>&lt;center&gt;&lt;b&gt; Note: In future, a formal proof discussion will be added &lt;/b&gt;&lt;/center&gt;
-&lt;p&gt;As an ambitious guy who always takes up weirdest challenges and shoots himself on his foot, for the first minor project in our college I took up the challenge to create a distributed key value store, with a Paxos protocol for consensus. What struck me as odd was that unlike papers that discuss Raft and provide a concrete implementation details throughout, there is not such convenience on literature associated with Paxos. So of course I had to wonder how to do leader elections in the multi-paxos implementation&lt;/p&gt;
-&lt;p&gt;The paper by Leslie Lamport on his &amp;ldquo;simplified&amp;rdquo; explanation of Paxos in &lt;cite&gt;&amp;ldquo;Paxos Made Simple&amp;rdquo; &lt;sup id=&#34;fnref:1&#34;&gt;&lt;a href=&#34;#fn:1&#34; class=&#34;footnote-ref&#34; role=&#34;doc-noteref&#34;&gt;1&lt;/a&gt;&lt;/sup&gt;&lt;/cite&gt; referenced an amazing result by &lt;cite&gt;Lynch, Fischer and Patterson &lt;sup id=&#34;fnref:2&#34;&gt;&lt;a href=&#34;#fn:2&#34; class=&#34;footnote-ref&#34; role=&#34;doc-noteref&#34;&gt;2&lt;/a&gt;&lt;/sup&gt;&lt;/cite&gt; which finally proved a doubt which many distributed system researchers had at that time&lt;/p&gt;
-&lt;p&gt;You see, around the 1985s it was already proved that in synchronous settings, we can have a distributed consensus.  Informally, synchronous models allow failures to be detected by waiting one entire step length for a reply from a processor, and presuming that it has crashed if no reply is received. But nothing had been said for the asynchronous settings (the exact details of it would be discussed soon in this article)&lt;/p&gt;
-&lt;p&gt;Before diving into the main proof, it will be a bit more pragmatic to see what the paper tries to aim at&lt;/p&gt;
-&lt;h1 id=&#34;a-quick-intuitive-walk-through&#34; &gt;A quick intuitive walk-through
-&lt;span&gt;
-    &lt;a href=&#34;#a-quick-intuitive-walk-through&#34;&gt;
-        &lt;svg viewBox=&#34;0 0 28 23&#34; height=&#34;100%&#34; width=&#34;19&#34; xmlns=&#34;http://www.w3.org/2000/svg&#34;&gt;&lt;path d=&#34;M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71&#34; fill=&#34;none&#34; stroke-linecap=&#34;round&#34; stroke-miterlimit=&#34;10&#34; stroke-width=&#34;2&#34;/&gt;&lt;path d=&#34;M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71&#34; fill=&#34;none&#34; stroke-linecap=&#34;round&#34; stroke-miterlimit=&#34;10&#34; stroke-width=&#34;2&#34;/&gt;&lt;/svg&gt;
-    &lt;/a&gt;
-&lt;/span&gt;
-&lt;/h1&gt;&lt;p&gt;For simplicity, assume that the configuration of a system is the combination of messages either in fly through the links, or the recent reception of a message by the processor. Bivalence refers to the fact that this configuration can go either to a $0$ decision state or a $1$ decision state. A step consists of a tranmission of messages to some processor&lt;/p&gt;
-&lt;p&gt;The main discusson of this paper is pretty much contained in the two lemmas
-The first lemma (Lemma 2 in paper) is&lt;/p&gt;
-&lt;center&gt;&lt;b&gt;P has an initial bivalent configuration &lt;/b&gt;&lt;/center&gt;
-&lt;p&gt;This lemma assumes that the consensus protocol is &lt;em&gt;partially correct&lt;/em&gt;, in that, if taken all the possible initial configurations, and taken some decisive transfers of messages between the processors, we will reach both the decisions of 1 and 0 (which is what this simplistic model in discussion limits itself to, discussed more later), which is a fair expectation, otherwise the consensus protocol won&amp;rsquo;t be needed&lt;/p&gt;
-&lt;p&gt;The benefit of this lemma is that it avoids the possibility of simple lookup of the initial state and get the decision value. This arises from the asynchronous nature of the distributed system&lt;/p&gt;
-&lt;p&gt;This combined with the second lemma (Lemma 3 in paper) leads to the actual result.&lt;/p&gt;
-&lt;p&gt;The second lemma has two parts to it. The first part discusses that for every bivalent configuration, you can always have a step such that it leads it to another bivalent configuration&lt;/p&gt;
-&lt;p&gt;The second part is very interesting, let&amp;rsquo;s say, we are at some bivalent configuration $C_1$, which after a step $e = (p,m)$ (sending message $m$ to processor $p$) and reception of the associated message by $p$ therefore, goes to $C_2$, we can find another step that takes $C_1$ to $D_1$, such that the step $e$ through the configration $D_1$ will lead to bivalent configuration&lt;/p&gt;
-&lt;p&gt;This is valid since our system is asynchronous, so we can&amp;rsquo;t rely on the fact that messages will have some ordering!&lt;/p&gt;
-&lt;p&gt;And this finally leads to the result, we cannot possibly have a protocol such that it always leads to a total consensus, even in presence of a single faulty process! If there&amp;rsquo;s ever a possible step which can take it to a univalent configuration, you can just have a bit of message re-ordering which will lead to a bivalent configuration after that step&lt;/p&gt;
-&lt;section class=&#34;footnotes&#34; role=&#34;doc-endnotes&#34;&gt;
-&lt;hr&gt;
-&lt;ol&gt;
-&lt;li id=&#34;fn:1&#34; role=&#34;doc-endnote&#34;&gt;
-&lt;p&gt;L Lamport &lt;a href=&#34;https://lamport.azurewebsites.net/pubs/paxos-simple.pdf&#34;&gt;Paxos Made Simple&lt;/a&gt; 2001&amp;#160;&lt;a href=&#34;#fnref:1&#34; class=&#34;footnote-backref&#34; role=&#34;doc-backlink&#34;&gt;&amp;#x21a9;&amp;#xfe0e;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id=&#34;fn:2&#34; role=&#34;doc-endnote&#34;&gt;
-&lt;p&gt;Fischer, Lynch, Patterson &lt;a href=&#34;https://groups.csail.mit.edu/tds/papers/Lynch/jacm85.pdf&#34;&gt;Impossibility of Distributed Consensus with One Faulty Process&lt;/a&gt; 1985&amp;#160;&lt;a href=&#34;#fnref:2&#34; class=&#34;footnote-backref&#34; role=&#34;doc-backlink&#34;&gt;&amp;#x21a9;&amp;#xfe0e;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;/ol&gt;
-&lt;/section&gt;
-</description>
-    </item>
-    
-  </channel>
-</rss>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>math on CortexAuth</title><link>https://thiazikara.github.io/tags/math/</link><description>CortexAuth (math)</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><lastBuildDate>Fri, 07 Apr 2023 00:00:00 +0000</lastBuildDate><atom:link href="https://thiazikara.github.io/tags/math/index.xml" rel="self" type="application/rss+xml"/><item><title>Impossibility of Distributed Consensus with one faulty process</title><link>https://thiazikara.github.io/post/flp/</link><pubDate>Fri, 07 Apr 2023 00:00:00 +0000</pubDate><guid>https://thiazikara.github.io/post/flp/</guid><description>&lt;center>&lt;b> Note: In future, a formal proof discussion will be added &lt;/b>&lt;/center>
+&lt;p>As an ambitious guy who always takes up weirdest challenges and shoots himself on his foot, for the first minor project in our college I took up the challenge to create a distributed key value store, with a Paxos protocol for consensus. What struck me as odd was that unlike papers that discuss Raft and provide a concrete implementation details throughout, there is not such convenience on literature associated with Paxos. So of course I had to wonder how to do leader elections in the multi-paxos implementation&lt;/p>
+&lt;p>The paper by Leslie Lamport on his &amp;ldquo;simplified&amp;rdquo; explanation of Paxos in &lt;cite>&amp;ldquo;Paxos Made Simple&amp;rdquo; &lt;sup id="fnref:1">&lt;a href="#fn:1" class="footnote-ref" role="doc-noteref">1&lt;/a>&lt;/sup>&lt;/cite> referenced an amazing result by &lt;cite>Lynch, Fischer and Patterson &lt;sup id="fnref:2">&lt;a href="#fn:2" class="footnote-ref" role="doc-noteref">2&lt;/a>&lt;/sup>&lt;/cite> which finally proved a doubt which many distributed system researchers had at that time&lt;/p>
+&lt;p>You see, around the 1985s it was already proved that in synchronous settings, we can have a distributed consensus. Informally, synchronous models allow failures to be detected by waiting one entire step length for a reply from a processor, and presuming that it has crashed if no reply is received. But nothing had been said for the asynchronous settings (the exact details of it would be discussed soon in this article)&lt;/p>
+&lt;p>Before diving into the main proof, it will be a bit more pragmatic to see what the paper tries to aim at&lt;/p>
+&lt;h1 id="a-quick-intuitive-walk-through" >A quick intuitive walk-through
+&lt;span>
+&lt;a href="#a-quick-intuitive-walk-through">
+&lt;svg viewBox="0 0 28 23" height="100%" width="19" xmlns="http://www.w3.org/2000/svg">&lt;path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" fill="none" stroke-linecap="round" stroke-miterlimit="10" stroke-width="2"/>&lt;path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" fill="none" stroke-linecap="round" stroke-miterlimit="10" stroke-width="2"/>&lt;/svg>
+&lt;/a>
+&lt;/span>
+&lt;/h1>&lt;p>For simplicity, assume that the configuration of a system is the combination of messages either in fly through the links, or the recent reception of a message by the processor. Bivalence refers to the fact that this configuration can go either to a $0$ decision state or a $1$ decision state. A step consists of a tranmission of messages to some processor&lt;/p>
+&lt;p>The main discusson of this paper is pretty much contained in the two lemmas
+The first lemma (Lemma 2 in paper) is&lt;/p>
+&lt;center>&lt;b>P has an initial bivalent configuration &lt;/b>&lt;/center>
+&lt;p>This lemma assumes that the consensus protocol is &lt;em>partially correct&lt;/em>, in that, if taken all the possible initial configurations, and taken some decisive transfers of messages between the processors, we will reach both the decisions of 1 and 0 (which is what this simplistic model in discussion limits itself to, discussed more later), which is a fair expectation, otherwise the consensus protocol won&amp;rsquo;t be needed&lt;/p>
+&lt;p>The benefit of this lemma is that it avoids the possibility of simple lookup of the initial state and get the decision value. This arises from the asynchronous nature of the distributed system&lt;/p>
+&lt;p>This combined with the second lemma (Lemma 3 in paper) leads to the actual result.&lt;/p>
+&lt;p>The second lemma has two parts to it. The first part discusses that for every bivalent configuration, you can always have a step such that it leads it to another bivalent configuration&lt;/p>
+&lt;p>The second part is very interesting, let&amp;rsquo;s say, we are at some bivalent configuration $C_1$, which after a step $e = (p,m)$ (sending message $m$ to processor $p$) and reception of the associated message by $p$ therefore, goes to $C_2$, we can find another step that takes $C_1$ to $D_1$, such that the step $e$ through the configration $D_1$ will lead to bivalent configuration&lt;/p>
+&lt;p>This is valid since our system is asynchronous, so we can&amp;rsquo;t rely on the fact that messages will have some ordering!&lt;/p>
+&lt;p>And this finally leads to the result, we cannot possibly have a protocol such that it always leads to a total consensus, even in presence of a single faulty process! If there&amp;rsquo;s ever a possible step which can take it to a univalent configuration, you can just have a bit of message re-ordering which will lead to a bivalent configuration after that step&lt;/p>
+&lt;section class="footnotes" role="doc-endnotes">
+&lt;hr>
+&lt;ol>
+&lt;li id="fn:1" role="doc-endnote">
+&lt;p>L Lamport &lt;a href="https://lamport.azurewebsites.net/pubs/paxos-simple.pdf">Paxos Made Simple&lt;/a> 2001&amp;#160;&lt;a href="#fnref:1" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:2" role="doc-endnote">
+&lt;p>Fischer, Lynch, Patterson &lt;a href="https://groups.csail.mit.edu/tds/papers/Lynch/jacm85.pdf">Impossibility of Distributed Consensus with One Faulty Process&lt;/a> 1985&amp;#160;&lt;a href="#fnref:2" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;/ol>
+&lt;/section></description></item></channel></rss>

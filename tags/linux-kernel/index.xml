@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>linux kernel on CortexAuth</title><link>https://thiazikara.github.io/tags/linux-kernel/</link><description>CortexAuth (linux kernel)</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><lastBuildDate>Tue, 28 Nov 2023 00:00:00 +0000</lastBuildDate><atom:link href="https://thiazikara.github.io/tags/linux-kernel/index.xml" rel="self" type="application/rss+xml"/><item><title>Hunting down a cgroup "bug"</title><link>https://thiazikara.github.io/post/cgroup_rt/</link><pubDate>Tue, 28 Nov 2023 00:00:00 +0000</pubDate><guid>https://thiazikara.github.io/post/cgroup_rt/</guid><description>&lt;p>I have upcoming exams and as it can be guessed, I tried to maximize my productivity during this time, by figuring out a &amp;ldquo;bug&amp;rdquo; I encountered while trying to get DragonflyDB working on my WSL machine!
+Totally producive use of time I must say&lt;/p>
+&lt;p>Whenever I tried to run the compiled executable, I was greeted with an error&lt;/p>
+&lt;p>&lt;code>&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-bash" data-lang="bash">E20231128 07:53:34.607069 &lt;span style="color:#ae81ff">80613&lt;/span> dfly_main.cc:702&lt;span style="color:#f92672">]&lt;/span> Failed in deducing any cgroup limits with paths /sys/fs/cgroup// and /sys/fs/cgroup//. Exiting.&lt;/code>&lt;/pre>&lt;/div>&lt;/code>&lt;/p>
+&lt;p>Turns out that it could not find the specific files associated with &lt;code>memory&lt;/code> and &lt;code>cpu&lt;/code> controllers for the root cgroup. Well, even tho it&amp;rsquo;s still bit unclear to me why, it seems like some controller files are not available in the root cgroup. Perhaps, since they don&amp;rsquo;t make sense to be there.&lt;/p>
+&lt;p>Nonetheless, I could just use &lt;code>cgexec&lt;/code> the task into a child cgroup. But I noticed the root cgroup didn&amp;rsquo;t enable the cpu controller for children cgroups. So let&amp;rsquo;s try enabling them for the subtree, and&amp;hellip;&lt;/p>
+&lt;p>&lt;code>&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-bash" data-lang="bash">root@CortexAuth:~# echo &lt;span style="color:#e6db74">&amp;#34;+cpu&amp;#34;&lt;/span> &amp;gt; /sys/fs/cgroup/cgroup.subtree_control
+-bash: echo: write error: Invalid argument&lt;/code>&lt;/pre>&lt;/div>&lt;/code>&lt;/p>
+&lt;p>Okay? That&amp;rsquo;s interesting. I was quite puzzled here since &lt;code>+cpu&lt;/code> seems to be valid argument to be put in here per the &lt;cite>documentation &lt;sup id="fnref:1">&lt;a href="#fn:1" class="footnote-ref" role="doc-noteref">1&lt;/a>&lt;/sup>&lt;/cite>. Let&amp;rsquo;s see what&amp;rsquo;s up inside the kernel perhaps? Since we&amp;rsquo;re not interacting with an actual regular file, but with a virtual file system, a procedure must handle this write on the file. A bit of &lt;code>grep&lt;/code>-ing leads to this&lt;/p>
+&lt;script src="https://emgithub.com/embed-v2.js?target=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FWSL2-Linux-Kernel%2Fblob%2Flinux-msft-wsl-5.15.y%2Fkernel%2Fcgroup%2Fcgroup.c%23L3344-L3381&amp;style=dark&amp;type=code&amp;showBorder=on&amp;showLineNumbers=on&amp;showFileMeta=on&amp;showFullPath=on&amp;showCopy=on">&lt;/script>
+&lt;p>In the above code, &lt;code>ss&lt;/code> refers to the subsystem object and &lt;code>ssid&lt;/code> is the numeric id for it. The parsing code has nothing suspicious in it. But we should still have a look into the execution flow&lt;/p>
+&lt;h2 id="but-its-wsl" >But it&amp;rsquo;s WSL!!
+&lt;span>
+&lt;a href="#but-its-wsl">
+&lt;svg viewBox="0 0 28 23" height="100%" width="19" xmlns="http://www.w3.org/2000/svg">&lt;path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" fill="none" stroke-linecap="round" stroke-miterlimit="10" stroke-width="2"/>&lt;path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" fill="none" stroke-linecap="round" stroke-miterlimit="10" stroke-width="2"/>&lt;/svg>
+&lt;/a>
+&lt;/span>
+&lt;/h2>&lt;p>I was a bit persistent to do this in WSL. It was bit problematic since &lt;code>kgdb&lt;/code> is gonna be a pain to work with inside WSL, if it would work at all. So I stuck with &lt;code>printk&lt;/code> statements for a while. During the debug I first encountered &lt;cite>ftrace&lt;sup id="fnref:2">&lt;a href="#fn:2" class="footnote-ref" role="doc-noteref">2&lt;/a>&lt;/sup>&lt;/cite>, but it&amp;rsquo;s function graphs were clunky to filter further, and granularity of information was limited to functions. I do think that I could&amp;rsquo;ve used them in conjunction with the mechanism I mention next. Tho I didn&amp;rsquo;t do that&lt;/p>
+&lt;p>What actually worked amazingly were the &lt;cite>kprobes&lt;sup id="fnref:3">&lt;a href="#fn:3" class="footnote-ref" role="doc-noteref">3&lt;/a>&lt;/sup>&lt;/cite>. They work pretty much the same way as typical debugger tools, place a breakpoint instruction and handle the hardware&amp;rsquo;s response to executing it. This further uses &lt;cite>notifier call chain&lt;sup id="fnref:4">&lt;a href="#fn:4" class="footnote-ref" role="doc-noteref">4&lt;/a>&lt;/sup>&lt;/cite> mechanism&lt;/p>
+&lt;h2 id="searching-the-root-cause" >Searching the root cause
+&lt;span>
+&lt;a href="#searching-the-root-cause">
+&lt;svg viewBox="0 0 28 23" height="100%" width="19" xmlns="http://www.w3.org/2000/svg">&lt;path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" fill="none" stroke-linecap="round" stroke-miterlimit="10" stroke-width="2"/>&lt;path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" fill="none" stroke-linecap="round" stroke-miterlimit="10" stroke-width="2"/>&lt;/svg>
+&lt;/a>
+&lt;/span>
+&lt;/h2>&lt;p>Well I should probably give a tl;dr at this point. I waste hours kprobing different points, searching them through the &lt;code>vmlinux&lt;/code> object dumps, find the root cause of &amp;ldquo;bug&amp;rdquo; and later realize that this is &lt;a href="https://docs.kernel.org/admin-guide/cgroup-v2.html#cpu">already a known issue&lt;/a>. Nonetheless, it points out the complexities of cgroup implementation and why there&amp;rsquo;s bit &lt;a href="https://davmac.wordpress.com/2016/10/14/cgroups-v2-resource-management-done-even-worse-the-second-time-around/">indecisiveness on it&amp;rsquo;s design&lt;/a>&lt;/p>
+&lt;p>For sake of avoiding being redundant, readers should read through this &lt;a href="http://terenceli.github.io/%E6%8A%80%E6%9C%AF/2020/01/05/cgroup-internlas">blog post by terenceli&lt;/a> and this &lt;a href="https://0xax.gitbooks.io/linux-insides/content/Cgroups/linux-cgroups-1.html">blog in the Linux Insides series by 0xax&lt;/a>. Additionally, the implementation details specific to &lt;cite>cgroup v1&lt;sup id="fnref:5">&lt;a href="#fn:5" class="footnote-ref" role="doc-noteref">5&lt;/a>&lt;/sup>&lt;/cite> mostly carry over to cgroup v2 too, because of &lt;a href="https://elixir.bootlin.com/linux/v5.13/source/include/linux/cgroup-defs.h#L356">compatibility requirements&lt;/a>.&lt;/p>
+&lt;p>The previously mentioned &lt;code>cgroup_subtree_control_write&lt;/code> procedure&amp;rsquo;s parsing did what was intended and the execution flow continued. I was still &lt;code>printk&lt;/code>-ing, but narrowed it down to the &lt;code>cgroup_apply_control&lt;/code> call at &lt;code>cgroup.c:3429&lt;/code>, which further calls &lt;code>cgroup_apply_control_enable&lt;/code> and &lt;code>cgroup_update_dfl_csses&lt;/code>&lt;/p>
+&lt;script src="https://emgithub.com/embed-v2.js?target=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FWSL2-Linux-Kernel%2Fblob%2Flinux-msft-wsl-5.15.y%2Fkernel%2Fcgroup%2Fcgroup.c%23L3265-L3285&amp;style=dark&amp;type=code&amp;showBorder=on&amp;showLineNumbers=on&amp;showFileMeta=on&amp;showFullPath=on&amp;showCopy=on">&lt;/script>
+&lt;p>The error originated from &lt;code>cgroup_update_dfl_csses&lt;/code>, which is one hog of a procedure&lt;/p>
+&lt;script src="https://emgithub.com/embed-v2.js?target=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FWSL2-Linux-Kernel%2Fblob%2Flinux-msft-wsl-5.15.y%2Fkernel%2Fcgroup%2Fcgroup.c%23L2994-L3045&amp;style=dark&amp;type=code&amp;showBorder=on&amp;showLineNumbers=on&amp;showFileMeta=on&amp;showFullPath=on&amp;showCopy=on">&lt;/script>
+&lt;p>OOF! Before being able to tackle what&amp;rsquo;s up here, it&amp;rsquo;s important to realize the structures important to workings of cgroups. We will build upon the cgroups v1 documentation&lt;cite>&lt;sup id="fnref:5">&lt;a href="#fn:5" class="footnote-ref" role="doc-noteref">5&lt;/a>&lt;/sup>&lt;/cite> and terenceli&amp;rsquo;s &lt;a href="http://terenceli.github.io/%E6%8A%80%E6%9C%AF/2020/01/05/cgroup-internlas">blog&lt;/a>. The following diagram is from terenceli&amp;rsquo;s blog&lt;/p>
+&lt;img src="https://thiazikara.github.io/images/image.png" width="100%"/>
+&lt;p>Because of complex relations between cgroups, tasks, css_sets and csses, I had to jot them down before tackling it further. I will drop them here for reference:&lt;/p>
+&lt;ol>
+&lt;li>
+&lt;p>&lt;code>task_struct&lt;/code> references just the &lt;code>css_set&lt;/code> (cgroup subsystem state set). Why not the cgroup? Mainly performance, usually just the &lt;code>css&lt;/code> matters&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>Different cgroups, each from different hierarchy, can play a role in parameterizing the subsystem for tasks. The nuance is that single &lt;code>task&lt;/code> can now belong to multiple cgroups in different hierarchies (further clarified later). Since the susbsystems enabled in each hierarchy are disjoint, we can be sure of there being no conflict in which &lt;code>css&lt;/code> is to be used.&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>&lt;code>css_set&lt;/code> contains multiple &lt;code>css&lt;/code> for each of the subsystems registered in kernel. It&amp;rsquo;s possible that they reference to one of the ancestor cgroup&amp;rsquo;s &lt;code>css&lt;/code> if the subsystem is disabled further down the hierarchy. &lt;code>cgroup.e_csets&lt;/code> and &lt;code>css_set.e_cset_node&lt;/code> are introduced to tackle different querying requirements&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>&lt;code>css_set&lt;/code>s can be reused in case a matching one is found. This is potentially for memory usage reduction&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>&lt;code>css_set.mg_*_node&lt;/code> are used to hold the &lt;code>cset&lt;/code>s part of an ongoing migration from one &lt;code>cset&lt;/code> to another&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>&lt;code>css_set.subsys&lt;/code> is immutable. This is bit fair to see since child cgroup&amp;rsquo;s tasks can have &lt;code>css_set&lt;/code>s which have the some &lt;code>-&amp;gt;subsys[ssid]&lt;/code> point to same object as this &lt;code>subsys[ssid]&lt;/code>. Ah the usual consistency problems!&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>As we have seen, a &lt;code>css_set&lt;/code> can belong to tasks from multiple &lt;code>cgroup&lt;/code>s (see 4). Conversely, a &lt;code>cgroup&lt;/code> may have several tasks, each using different &lt;code>cset&lt;/code>s. Hence, we observe a N:M relationship between &lt;code>cgroup&lt;/code> and &lt;code>css_set&lt;/code>. Each &lt;code>cgrp_cset_link&lt;/code> references a &lt;code>cgroup&lt;/code> and a &lt;code>css_set&lt;/code>, entailing a relationship between them.&lt;/p>
+&lt;/li>
+&lt;/ol>
+&lt;p>Few things to clear up before we move ahead:&lt;/p>
+&lt;ul>
+&lt;li>
+&lt;p>Even in cgroup v2, we have possibility of using subsystems that don&amp;rsquo;t support v2 to bind to v1 hierarchy, or any subsystem not bound to v2 can be bound to v1 hierarchies. This is why we still have the multiple hierarchies and the nuances. Further, a &lt;code>default hierarchy&lt;/code> is introduced in v2 implementation, which is the generic unified v2 hierarchy&lt;cite>&lt;sup id="fnref:6">&lt;a href="#fn:6" class="footnote-ref" role="doc-noteref">6&lt;/a>&lt;/sup>&lt;/cite>. Moreover, &lt;code>css_set&lt;/code> has a field &lt;code>dfl_cgrp&lt;/code>, if &lt;code>css_set&lt;/code> ever gets linked to a cgroup in default hierarchy, the cgroup is assigned to it (in v2)&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>We may wonder now when are the two &lt;code>cset&lt;/code>s considered to be the &amp;ldquo;same&amp;rdquo; (see 4). &lt;a href="https://github.com/microsoft/WSL2-Linux-Kernel/blob/linux-msft-wsl-5.15.y/kernel/cgroup/cgroup.c#L1003">linux-msft-wsl-5.15.y/kernel/cgroup/cgroup.c#L1003&lt;/a> pretty much lays it out. Check if subsystems are the same, domains cgroups match, cgroups they are linked to match (with exception of when both &lt;code>css_set&lt;/code> are on destination hierarchy, in that case, the candidate &lt;code>css_set&lt;/code> should be associated with the destination &lt;code>cgroup&lt;/code>). I still don&amp;rsquo;t know why the ordered comparison works tho.&lt;/p>
+&lt;/li>
+&lt;/ul>
+&lt;p>After this info dump, we can finally try tackling the execution flow (which turns out not all that important later&amp;hellip;). So referring back to the &lt;code>cgroup_update_dfl_csses&lt;/code>, we see that&lt;/p>
+&lt;script src="https://emgithub.com/embed-v2.js?target=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FWSL2-Linux-Kernel%2Fblob%2Flinux-msft-wsl-5.15.y%2Fkernel%2Fcgroup%2Fcgroup.c%23L3005-L3013&amp;style=dark&amp;type=code&amp;showBorder=on&amp;showFileMeta=on&amp;showFullPath=on&amp;showCopy=on&amp;showLineNumbers=on">&lt;/script>
+&lt;p>All &lt;code>css&lt;/code>es in the subtree are traversed, and are recorded for the migration information. This information is appended to the &lt;code>css.mg_src_cgrp&lt;/code> and &lt;code>css.mg_dst_cgrp&lt;/code> to record source and destination cgroups of migration and the &lt;code>mgctx&lt;/code> has &lt;code>preload_src_csets&lt;/code> field to link together the &lt;code>mg_src_preload_node&lt;/code> linkedlist heads&lt;/p>
+&lt;p>After a write synchronization with threadgroups, &lt;code>cgroup_migrate_prepare_dst&lt;/code> is called&lt;/p>
+&lt;script src="https://emgithub.com/embed-v2.js?target=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FWSL2-Linux-Kernel%2Fblob%2Flinux-msft-wsl-5.15.y%2Fkernel%2Fcgroup%2Fcgroup.c%23L2735-L2795&amp;style=dark&amp;type=code&amp;showBorder=on&amp;showFileMeta=on&amp;showFullPath=on&amp;showCopy=on&amp;showLineNumbers=on">&lt;/script>
+&lt;p>This procedure was bit of a weirdo one, because of a weird dependency in object manipulation being used here
+From a glance we see that &lt;code>cset&lt;/code>s loaded in migration context are traversed through and associated destination sets fetched from &lt;code>find_css_set&lt;/code>. I ignored it at first since I could not see how will it be decided if a new cset is to be created or not, which was bit of a mistake since later on this renders me a bit more clueless. I will do same in this blog post for now.&lt;/p>
+&lt;p>So, &lt;code>dst_cset&lt;/code> and &lt;code>src_cset&lt;/code> are compared to check if both turn out to be same and removed from the migration context if it&amp;rsquo;s true, &lt;code>dst_cset&lt;/code> is added to the migration context&amp;rsquo;s destination cset node list, and finally, we check if there is a subsystem change and alter the migration context&amp;rsquo;s &lt;code>ss_mask&lt;/code> to indicate a subsystem change&lt;/p>
+&lt;p>Then, &lt;code>cgroup_migrate_add_task&lt;/code> is called on and all &lt;code>cset&lt;/code> nodes in migration context source nodes are checked for tasks and added to a &lt;code>taskset&lt;/code>&lt;/p>
+&lt;script src="https://emgithub.com/embed-v2.js?target=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FWSL2-Linux-Kernel%2Fblob%2Flinux-msft-wsl-5.15.y%2Fkernel%2Fcgroup%2Fcgroup.c%23L2735-L2795&amp;style=dark&amp;type=code&amp;showBorder=on&amp;showFileMeta=on&amp;showFullPath=on&amp;showCopy=on&amp;showLineNumbers=on">&lt;/script>
+&lt;p>There is nothing noteworthy here. We finally see the actual migration occuring in the call to &lt;code>cgroup_migrate_execute&lt;/code>&lt;/p>
+&lt;script src="https://emgithub.com/embed-v2.js?target=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FWSL2-Linux-Kernel%2Fblob%2Flinux-msft-wsl-5.15.y%2Fkernel%2Fcgroup%2Fcgroup.c%23L2514-L2534&amp;style=dark&amp;type=code&amp;showBorder=on&amp;showFileMeta=on&amp;showFullPath=on&amp;showCopy=on&amp;showLineNumbers=on">&lt;/script>
+&lt;p>The code portion performs subsystem checks to be sure that this operation will not fail when actual migration is performed. &lt;code>mgctx-&amp;gt;ss_mask&lt;/code>, which held the bits for the subsystem changes is seen here too. Since I added only a &lt;code>+cpu&lt;/code> to &lt;code>subtree_control&lt;/code> file, it is obvious that &lt;code>ss-&amp;gt;can_attach&lt;/code> is referencing the &lt;code>cpu&lt;/code> controller. Which for some reason fails, and we finally see the cause of the invalid argument error,&lt;/p>
+&lt;script src="https://emgithub.com/embed-v2.js?target=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FWSL2-Linux-Kernel%2Fblob%2Flinux-msft-wsl-5.15.y%2Fkernel%2Fsched%2Fcore.c%23L10036-L10065&amp;style=dark&amp;type=code&amp;showBorder=on&amp;showFileMeta=on&amp;showFullPath=on&amp;showCopy=on&amp;showLineNumbers=on">&lt;/script>
+&lt;p>My obvious guess was there is something wrong with RT scheduling so I compiled the kernel turning it off and very well the problem was no more there. Further looking around leads me to &lt;a href="https://docs.kernel.org/scheduler/sched-rt-group.html#default-behaviour">this documentation&lt;/a> which mentions that by default new groups get runtime of 0. I kinda didn&amp;rsquo;t realize that I just stumbled on an almost-answer, and I kept pushing on through source code&lt;/p>
+&lt;script src="https://emgithub.com/embed-v2.js?target=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FWSL2-Linux-Kernel%2Fblob%2Flinux-msft-wsl-5.15.y%2Fkernel%2Fsched%2Frt.c%23L2774-L2781&amp;style=dark&amp;type=code&amp;showBorder=on&amp;showFileMeta=on&amp;showFullPath=on&amp;showCopy=on&amp;showLineNumbers=on">&lt;/script>
+&lt;p>Turns out, the runtime period allocated in this &lt;code>task_group&lt;/code> is zero. At this point I probed the functions that create &lt;code>task_group&lt;/code>s and noticed they were created down in the call to &lt;code>cgroup_control_apply_enable&lt;/code>. Now I had to step back a bit, and see the &lt;code>css&lt;/code> allocations&lt;/p>
+&lt;script src="https://emgithub.com/embed-v2.js?target=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FWSL2-Linux-Kernel%2Fblob%2Flinux-msft-wsl-5.15.y%2Fkernel%2Fcgroup%2Fcgroup.c%23L3174-L3205&amp;style=dark&amp;type=code&amp;showBorder=on&amp;showFileMeta=on&amp;showFullPath=on&amp;showCopy=on&amp;showLineNumbers=on">&lt;/script>
+&lt;p>Very straightforward, &lt;code>cgroup&lt;/code>s in hierarchy are checked for if they have some &lt;code>css&lt;/code> associated with them, and otherwise &lt;code>css_create&lt;/code> is called&lt;/p>
+&lt;script src="https://emgithub.com/embed-v2.js?target=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FWSL2-Linux-Kernel%2Fblob%2Flinux-msft-wsl-5.15.y%2Fkernel%2Fcgroup%2Fcgroup.c%23L5350-L5394&amp;style=dark&amp;type=code&amp;showBorder=on&amp;showFileMeta=on&amp;showFullPath=on&amp;showCopy=on&amp;showLineNumbers=on">&lt;/script>
+&lt;p>There&amp;rsquo;s more to the procedure but it does not matter for the discussion. &lt;code>ss-&amp;gt;css_alloc&lt;/code> is called, which will rightfully allocate a &lt;code>css&lt;/code> associated with the &lt;code>cpu&lt;/code> controller. Following path the execution flow we encounter this,&lt;/p>
+&lt;script src="https://emgithub.com/embed-v2.js?target=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FWSL2-Linux-Kernel%2Fblob%2Flinux-msft-wsl-5.15.y%2Fkernel%2Fsched%2Frt.c%23L194-L210&amp;style=dark&amp;type=code&amp;showBorder=on&amp;showFileMeta=on&amp;showFullPath=on&amp;showCopy=on&amp;showLineNumbers=on">&lt;/script>
+&lt;p>Aha! So the task groups are created with &lt;code>rt_period&lt;/code> of zero!&lt;/p>
+&lt;p>To find how &lt;code>find_css_set&lt;/code> works, we need to note the control propagation, where the change to &lt;code>subtree_control&lt;/code> of a &lt;code>cgroup&lt;/code>,&lt;/p>
+&lt;script src="https://emgithub.com/embed-v2.js?target=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FWSL2-Linux-Kernel%2Fblob%2Flinux-msft-wsl-5.15.y%2Fkernel%2Fcgroup%2Fcgroup.c%23L3426&amp;style=dark&amp;type=code&amp;showBorder=on&amp;showLineNumbers=on&amp;showFileMeta=on&amp;showFullPath=on&amp;showCopy=on">&lt;/script>
+&lt;p>are propagated&lt;/p>
+&lt;script src="https://emgithub.com/embed-v2.js?target=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FWSL2-Linux-Kernel%2Fblob%2Flinux-msft-wsl-5.15.y%2Fkernel%2Fcgroup%2Fcgroup.c%23L3116-L3127&amp;style=dark&amp;type=code&amp;showBorder=on&amp;showLineNumbers=on&amp;showFileMeta=on&amp;showFullPath=on&amp;showCopy=on">&lt;/script>
+&lt;p>In &lt;code>find_css_set&lt;/code> procedure, a call is made to &lt;code>find_existing_css_set&lt;/code>, which takes old &lt;code>css_set&lt;/code>, the hierarchy is it gonna be transfered to and a &lt;code>template&lt;/code>&lt;/p>
+&lt;script src="https://emgithub.com/embed-v2.js?target=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FWSL2-Linux-Kernel%2Fblob%2Flinux-msft-wsl-5.15.y%2Fkernel%2Fcgroup%2Fcgroup.c%23L1216-L1220&amp;style=dark&amp;type=code&amp;showBorder=on&amp;showLineNumbers=on&amp;showFileMeta=on&amp;showFullPath=on&amp;showCopy=on">&lt;/script>
+&lt;p>A look into the &lt;code>find_existing_css_set&lt;/code> shows some calls, to &lt;code>cgroup_e_css_by_mask&lt;/code> procedure&lt;/p>
+&lt;script src="https://emgithub.com/embed-v2.js?target=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FWSL2-Linux-Kernel%2Fblob%2Flinux-msft-wsl-5.15.y%2Fkernel%2Fcgroup%2Fcgroup.c%23L1077-L1124&amp;style=dark&amp;type=code&amp;showBorder=on&amp;showLineNumbers=on&amp;showFileMeta=on&amp;showFullPath=on&amp;showCopy=on">&lt;/script>
+&lt;p>This procedure returns the effective &lt;code>css&lt;/code> for the &lt;code>cgroup&lt;/code> based on the &lt;code>ss&lt;/code> subsystem object. This procedure is dependent on the update propagation of the flags earlier, which sounds a bit bizarre way to handle this situation. But at least there were comments throughout source code to help me figure this out!&lt;/p>
+&lt;p>And with that, we have the root cause figured out, the allocated cgroup&amp;rsquo;s &lt;code>cset&lt;/code> all seem to have have taskgroup with runtime of zero. At this point I finally tried googling about it and as it turns out it was &lt;a href="https://docs.kernel.org/admin-guide/cgroup-v2.html#cpu">already mentioned&lt;/a> in the docs. Which while felt a bit dumb of an oversight on my part&lt;/p>
+&lt;h2 id="and-thats-it" >And&amp;hellip; that&amp;rsquo;s it!
+&lt;span>
+&lt;a href="#and-thats-it">
+&lt;svg viewBox="0 0 28 23" height="100%" width="19" xmlns="http://www.w3.org/2000/svg">&lt;path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" fill="none" stroke-linecap="round" stroke-miterlimit="10" stroke-width="2"/>&lt;path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" fill="none" stroke-linecap="round" stroke-miterlimit="10" stroke-width="2"/>&lt;/svg>
+&lt;/a>
+&lt;/span>
+&lt;/h2>&lt;p>Well of course not.. I tried to find discussions regarding what&amp;rsquo;s up with status of support for real time processes. Tejun Heo seems to be mainly managing cgroup-v2 and I could not find any further discussions about it. Fixing it would probably call for lot of heuristics, since realtime scheduling knobs act as an absolute slice of total CPU time, and hence cannot be composed easily in a regular manner&lt;cite>&lt;sup id="fnref:7">&lt;a href="#fn:7" class="footnote-ref" role="doc-noteref">7&lt;/a>&lt;/sup>&lt;/cite>.&lt;/p>
+&lt;p>Nonetheless, I did find something funny, Linux nerds left on the wild in internet space,&lt;/p>
+&lt;p>&lt;img src="https://thiazikara.github.io/images/linux_user_funny.png" alt="">&lt;/p>
+&lt;p>Time to study for exams ig. Laters!&lt;/p>
+&lt;section class="footnotes" role="doc-endnotes">
+&lt;hr>
+&lt;ol>
+&lt;li id="fn:1" role="doc-endnote">
+&lt;p>&lt;a href="https://www.kernel.org/doc/html/v5.13/admin-guide/cgroup-v2.html">Control Group v2&lt;/a>&amp;#160;&lt;a href="#fnref:1" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:2" role="doc-endnote">
+&lt;p>&lt;a href="https://man7.org/linux/man-pages/man1/trace-cmd.1.html">trace-cmd&lt;/a>&amp;#160;&lt;a href="#fnref:2" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:3" role="doc-endnote">
+&lt;p>&lt;a href="https://docs.kernel.org/trace/kprobes.html">Kprobes&lt;/a>&amp;#160;&lt;a href="#fnref:3" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:4" role="doc-endnote">
+&lt;p>&lt;a href="https://0xax.gitbooks.io/linux-insides/content/Concepts/linux-cpu-4.html">Linux insides - Notification Chains in Linux Kernel&lt;/a>&amp;#160;&lt;a href="#fnref:4" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:5" role="doc-endnote">
+&lt;p>&lt;a href="https://docs.kernel.org/admin-guide/cgroup-v1/cgroups.html_">Control Group v1&lt;/a>&amp;#160;&lt;a href="#fnref:5" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:6" role="doc-endnote">
+&lt;p>&lt;a href="https://github.com/microsoft/WSL2-Linux-Kernel/blob/linux-msft-wsl-5.15.y/kernel/cgroup/cgroup.c#L266-L312">kernel/cgroup/cgroup.c:cgroup_on_dfl&lt;/a>&amp;#160;&lt;a href="#fnref:6" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:7" role="doc-endnote">
+&lt;p>&lt;a href="https://docs.kernel.org/scheduler/sched-rt-group.html#basis-for-grouping-tasks">Real-Time Group Scheduling&lt;/a>&amp;#160;&lt;a href="#fnref:7" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;/ol>
+&lt;/section></description></item></channel></rss>

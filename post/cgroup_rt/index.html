@@ -1,0 +1,257 @@
+<!doctype html><html lang=en-us data-theme>
+<head>
+<meta charset=utf-8>
+<meta name=HandheldFriendly content="True">
+<meta name=viewport content="width=device-width,initial-scale=1">
+<meta name=referrer content="no-referrer-when-downgrade">
+<title>Hunting down a cgroup "bug" - CortexAuth</title>
+<meta name=description content="How I wasted my time debugging a missing feature under WSL to find that I didn&rsquo;t really need to waste all that time">
+<link rel=icon type=image/x-icon href=https://thiazikara.github.io/favicon.png>
+<link rel=apple-touch-icon-precomposed href=https://thiazikara.github.io/favicon.png>
+<style>body{visibility:hidden;opacity:0}</style>
+<noscript>
+<style>body{visibility:visible;opacity:1}</style>
+</noscript>
+<link rel=stylesheet href=https://thiazikara.github.io/css/style.min.32718fcf9ab07bef739918133885447bc2e5495ae41b9c9685babce2425dcbb2.css integrity="sha256-MnGPz5qwe+9zmRgTOIVEe8LlSVrkG5yWhbq84kJdy7I=">
+<script src=https://thiazikara.github.io/js/script.min.510c781c39dbb21b4c76d85c82e2bdf4689220adbb7cd61e49e9d293e442fb42.js type=text/javascript integrity="sha256-UQx4HDnbshtMdthcguK99GiSIK27fNYeSenSk+RC+0I="></script>
+<meta property="og:title" content="Hunting down a cgroup &#34;bug&#34;">
+<meta property="og:description" content="How I wasted my time debugging a missing feature under WSL to find that I didn&rsquo;t really need to waste all that time">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://thiazikara.github.io/post/cgroup_rt/"><meta property="article:section" content="post">
+<meta property="article:published_time" content="2023-11-28T00:00:00+00:00">
+<meta property="article:modified_time" content="2023-11-28T00:00:00+00:00">
+<meta name=twitter:card content="summary">
+<meta name=twitter:title content="Hunting down a cgroup &#34;bug&#34;">
+<meta name=twitter:description content="How I wasted my time debugging a missing feature under WSL to find that I didn&rsquo;t really need to waste all that time">
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-316F9K015K"></script>
+<script>var doNotTrack=!1;if(!doNotTrack){window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date),gtag('config','G-316F9K015K',{anonymize_ip:!1})}</script>
+</head>
+<body>
+<a class=skip-main href=#main>Skip to main content</a>
+<div class=container>
+<header class=common-header>
+<div class=header-top>
+<h1 class=site-title>
+<a href=/>CortexAuth</a>
+</h1>
+<ul class=social-icons>
+<li>
+<a href=https://github.com/iwereth title=Github rel=me>
+<span class=inline-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><path fill="currentcolor" d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6.0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6.0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3.0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1.0-6.2-.3-40.4-.3-61.4.0.0-70 15-84.7-29.8.0.0-11.4-29.1-27.8-36.6.0.0-22.9-15.7 1.6-15.4.0.0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5.0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9.0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4.0 33.7-.3 75.4-.3 83.6.0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6.0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9.0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg>
+</span>
+</a>
+</li>
+<li>
+<a href=https://twitter.com/@cortexauth title=Twitter rel=me>
+<span class=inline-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentcolor" d="M459.37 151.716c.325 4.548.325 9.097.325 13.645.0 138.72-105.583 298.558-298.558 298.558-59.452.0-114.68-17.219-161.137-47.106 8.447.974 16.568 1.299 25.34 1.299 49.055.0 94.213-16.568 130.274-44.832-46.132-.975-84.792-31.188-98.112-72.772 6.498.974 12.995 1.624 19.818 1.624 9.421.0 18.843-1.3 27.614-3.573-48.081-9.747-84.143-51.98-84.143-102.985v-1.299c13.969 7.797 30.214 12.67 47.431 13.319-28.264-18.843-46.781-51.005-46.781-87.391.0-19.492 5.197-37.36 14.294-52.954 51.655 63.675 129.3 105.258 216.365 109.807-1.624-7.797-2.599-15.918-2.599-24.04.0-57.828 46.782-104.934 104.934-104.934 30.213.0 57.502 12.67 76.67 33.137 23.715-4.548 46.456-13.32 66.599-25.34-7.798 24.366-24.366 44.833-46.132 57.827 21.117-2.273 41.584-8.122 60.426-16.243-14.292 20.791-32.161 39.308-52.628 54.253z"/></svg>
+</span>
+</a>
+</li>
+<li>
+<a href=https://linkedin.com/in/cortexauth title=Linkedin rel=me>
+<span class=inline-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path fill="currentcolor" d="M416 32H31.9C14.3 32 0 46.5.0 64.3v383.4C0 465.5 14.3 480 31.9 480H416c17.6.0 32-14.5 32-32.3V64.3c0-17.8-14.4-32.3-32-32.3zM135.4 416H69V202.2h66.5V416zm-33.2-243c-21.3.0-38.5-17.3-38.5-38.5S80.9 96 102.2 96c21.2.0 38.5 17.3 38.5 38.5.0 21.3-17.2 38.5-38.5 38.5zm282.1 243h-66.4V312c0-24.8-.5-56.7-34.5-56.7-34.6.0-39.9 27-39.9 54.9V416h-66.4V202.2h63.7v29.2h.9c8.9-16.8 30.6-34.5 62.9-34.5 67.2.0 79.7 44.3 79.7 101.9V416z"/></svg>
+</span>
+</a>
+</li>
+<li>
+<a href=https://thiazikara.github.io/index.xml title=RSS rel=me>
+<span class=inline-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path fill="currentcolor" d="M128.081 415.959c0 35.369-28.672 64.041-64.041 64.041S0 451.328.0 415.959s28.672-64.041 64.041-64.041 64.04 28.673 64.04 64.041zm175.66 47.25c-8.354-154.6-132.185-278.587-286.95-286.95C7.656 175.765.0 183.105.0 192.253v48.069c0 8.415 6.49 15.472 14.887 16.018 111.832 7.284 201.473 96.702 208.772 208.772.547 8.397 7.604 14.887 16.018 14.887h48.069c9.149.001 16.489-7.655 15.995-16.79zm144.249.288C439.596 229.677 251.465 40.445 16.503 32.01 7.473 31.686.0 38.981.0 48.016v48.068c0 8.625 6.835 15.645 15.453 15.999 191.179 7.839 344.627 161.316 352.465 352.465.353 8.618 7.373 15.453 15.999 15.453h48.068c9.034-.001 16.329-7.474 16.005-16.504z"/></svg>
+</span>
+</a>
+</li>
+</ul>
+</div>
+<div style=font-size:12px>I write about computers, math and random stuffs that fascinate me</div>
+<nav>
+<a href=https://thiazikara.github.io/about/ title>About</a>
+<a href=https://thiazikara.github.io/tags/ title>Tags</a>
+<a href=https://thiazikara.github.io/posts/ title>Archive</a>
+</nav>
+<script>MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']],displayMath:[['$$','$$'],['\\[','\\]']],processEscapes:!0,processEnvironments:!0},options:{skipHtmlTags:['script','noscript','style','textarea','pre']}},window.addEventListener('load',a=>{document.querySelectorAll("mjx-container").forEach(function(a){a.parentElement.classList+='has-jax'})})</script>
+<script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+<script type=text/javascript id=MathJax-script async src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js></script>
+</header>
+<main id=main tabindex=-1>
+<article class="post h-entry">
+<div class=post-header>
+<header>
+<h1 class="p-name post-title">Hunting down a cgroup "bug"</h1>
+</header>
+</div>
+<div class="content e-content">
+<p>I have upcoming exams and as it can be guessed, I tried to maximize my productivity during this time, by figuring out a &ldquo;bug&rdquo; I encountered while trying to get DragonflyDB working on my WSL machine!
+Totally producive use of time I must say</p>
+<p>Whenever I tried to run the compiled executable, I was greeted with an error</p>
+<p><code><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash>E20231128 07:53:34.607069 <span style=color:#ae81ff>80613</span> dfly_main.cc:702<span style=color:#f92672>]</span> Failed in deducing any cgroup limits with paths /sys/fs/cgroup// and /sys/fs/cgroup//. Exiting.</code></pre></div></code></p>
+<p>Turns out that it could not find the specific files associated with <code>memory</code> and <code>cpu</code> controllers for the root cgroup. Well, even tho it&rsquo;s still bit unclear to me why, it seems like some controller files are not available in the root cgroup. Perhaps, since they don&rsquo;t make sense to be there.</p>
+<p>Nonetheless, I could just use <code>cgexec</code> the task into a child cgroup. But I noticed the root cgroup didn&rsquo;t enable the cpu controller for children cgroups. So let&rsquo;s try enabling them for the subtree, and&mldr;</p>
+<p><code><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash>root@CortexAuth:~# echo <span style=color:#e6db74>&#34;+cpu&#34;</span> &gt; /sys/fs/cgroup/cgroup.subtree_control
+-bash: echo: write error: Invalid argument</code></pre></div></code></p>
+<p>Okay? That&rsquo;s interesting. I was quite puzzled here since <code>+cpu</code> seems to be valid argument to be put in here per the <cite>documentation <sup id=fnref:1><a href=#fn:1 class=footnote-ref role=doc-noteref>1</a></sup></cite>. Let&rsquo;s see what&rsquo;s up inside the kernel perhaps? Since we&rsquo;re not interacting with an actual regular file, but with a virtual file system, a procedure must handle this write on the file. A bit of <code>grep</code>-ing leads to this</p>
+<script src="https://emgithub.com/embed-v2.js?target=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FWSL2-Linux-Kernel%2Fblob%2Flinux-msft-wsl-5.15.y%2Fkernel%2Fcgroup%2Fcgroup.c%23L3344-L3381&style=dark&type=code&showBorder=on&showLineNumbers=on&showFileMeta=on&showFullPath=on&showCopy=on"></script>
+<p>In the above code, <code>ss</code> refers to the subsystem object and <code>ssid</code> is the numeric id for it. The parsing code has nothing suspicious in it. But we should still have a look into the execution flow</p>
+<h2 id=but-its-wsl>But it&rsquo;s WSL!!
+<span>
+<a href=#but-its-wsl><svg viewBox="0 0 28 23" height="100%" width="19" xmlns="http://www.w3.org/2000/svg"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" fill="none" stroke-linecap="round" stroke-miterlimit="10" stroke-width="2"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" fill="none" stroke-linecap="round" stroke-miterlimit="10" stroke-width="2"/></svg>
+</a>
+</span>
+</h2><p>I was a bit persistent to do this in WSL. It was bit problematic since <code>kgdb</code> is gonna be a pain to work with inside WSL, if it would work at all. So I stuck with <code>printk</code> statements for a while. During the debug I first encountered <cite>ftrace<sup id=fnref:2><a href=#fn:2 class=footnote-ref role=doc-noteref>2</a></sup></cite>, but it&rsquo;s function graphs were clunky to filter further, and granularity of information was limited to functions. I do think that I could&rsquo;ve used them in conjunction with the mechanism I mention next. Tho I didn&rsquo;t do that</p>
+<p>What actually worked amazingly were the <cite>kprobes<sup id=fnref:3><a href=#fn:3 class=footnote-ref role=doc-noteref>3</a></sup></cite>. They work pretty much the same way as typical debugger tools, place a breakpoint instruction and handle the hardware&rsquo;s response to executing it. This further uses <cite>notifier call chain<sup id=fnref:4><a href=#fn:4 class=footnote-ref role=doc-noteref>4</a></sup></cite> mechanism</p>
+<h2 id=searching-the-root-cause>Searching the root cause
+<span>
+<a href=#searching-the-root-cause><svg viewBox="0 0 28 23" height="100%" width="19" xmlns="http://www.w3.org/2000/svg"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" fill="none" stroke-linecap="round" stroke-miterlimit="10" stroke-width="2"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" fill="none" stroke-linecap="round" stroke-miterlimit="10" stroke-width="2"/></svg>
+</a>
+</span>
+</h2><p>Well I should probably give a tl;dr at this point. I waste hours kprobing different points, searching them through the <code>vmlinux</code> object dumps, find the root cause of &ldquo;bug&rdquo; and later realize that this is <a href=https://docs.kernel.org/admin-guide/cgroup-v2.html#cpu>already a known issue</a>. Nonetheless, it points out the complexities of cgroup implementation and why there&rsquo;s bit <a href=https://davmac.wordpress.com/2016/10/14/cgroups-v2-resource-management-done-even-worse-the-second-time-around/>indecisiveness on it&rsquo;s design</a></p>
+<p>For sake of avoiding being redundant, readers should read through this <a href=http://terenceli.github.io/%E6%8A%80%E6%9C%AF/2020/01/05/cgroup-internlas>blog post by terenceli</a> and this <a href=https://0xax.gitbooks.io/linux-insides/content/Cgroups/linux-cgroups-1.html>blog in the Linux Insides series by 0xax</a>. Additionally, the implementation details specific to <cite>cgroup v1<sup id=fnref:5><a href=#fn:5 class=footnote-ref role=doc-noteref>5</a></sup></cite> mostly carry over to cgroup v2 too, because of <a href=https://elixir.bootlin.com/linux/v5.13/source/include/linux/cgroup-defs.h#L356>compatibility requirements</a>.</p>
+<p>The previously mentioned <code>cgroup_subtree_control_write</code> procedure&rsquo;s parsing did what was intended and the execution flow continued. I was still <code>printk</code>-ing, but narrowed it down to the <code>cgroup_apply_control</code> call at <code>cgroup.c:3429</code>, which further calls <code>cgroup_apply_control_enable</code> and <code>cgroup_update_dfl_csses</code></p>
+<script src="https://emgithub.com/embed-v2.js?target=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FWSL2-Linux-Kernel%2Fblob%2Flinux-msft-wsl-5.15.y%2Fkernel%2Fcgroup%2Fcgroup.c%23L3265-L3285&style=dark&type=code&showBorder=on&showLineNumbers=on&showFileMeta=on&showFullPath=on&showCopy=on"></script>
+<p>The error originated from <code>cgroup_update_dfl_csses</code>, which is one hog of a procedure</p>
+<script src="https://emgithub.com/embed-v2.js?target=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FWSL2-Linux-Kernel%2Fblob%2Flinux-msft-wsl-5.15.y%2Fkernel%2Fcgroup%2Fcgroup.c%23L2994-L3045&style=dark&type=code&showBorder=on&showLineNumbers=on&showFileMeta=on&showFullPath=on&showCopy=on"></script>
+<p>OOF! Before being able to tackle what&rsquo;s up here, it&rsquo;s important to realize the structures important to workings of cgroups. We will build upon the cgroups v1 documentation<cite><sup id=fnref:5><a href=#fn:5 class=footnote-ref role=doc-noteref>5</a></sup></cite> and terenceli&rsquo;s <a href=http://terenceli.github.io/%E6%8A%80%E6%9C%AF/2020/01/05/cgroup-internlas>blog</a>. The following diagram is from terenceli&rsquo;s blog</p>
+<img src=/images/image.png width=100%>
+<p>Because of complex relations between cgroups, tasks, css_sets and csses, I had to jot them down before tackling it further. I will drop them here for reference:</p>
+<ol>
+<li>
+<p><code>task_struct</code> references just the <code>css_set</code> (cgroup subsystem state set). Why not the cgroup? Mainly performance, usually just the <code>css</code> matters</p>
+</li>
+<li>
+<p>Different cgroups, each from different hierarchy, can play a role in parameterizing the subsystem for tasks. The nuance is that single <code>task</code> can now belong to multiple cgroups in different hierarchies (further clarified later). Since the susbsystems enabled in each hierarchy are disjoint, we can be sure of there being no conflict in which <code>css</code> is to be used.</p>
+</li>
+<li>
+<p><code>css_set</code> contains multiple <code>css</code> for each of the subsystems registered in kernel. It&rsquo;s possible that they reference to one of the ancestor cgroup&rsquo;s <code>css</code> if the subsystem is disabled further down the hierarchy. <code>cgroup.e_csets</code> and <code>css_set.e_cset_node</code> are introduced to tackle different querying requirements</p>
+</li>
+<li>
+<p><code>css_set</code>s can be reused in case a matching one is found. This is potentially for memory usage reduction</p>
+</li>
+<li>
+<p><code>css_set.mg_*_node</code> are used to hold the <code>cset</code>s part of an ongoing migration from one <code>cset</code> to another</p>
+</li>
+<li>
+<p><code>css_set.subsys</code> is immutable. This is bit fair to see since child cgroup&rsquo;s tasks can have <code>css_set</code>s which have the some <code>->subsys[ssid]</code> point to same object as this <code>subsys[ssid]</code>. Ah the usual consistency problems!</p>
+</li>
+<li>
+<p>As we have seen, a <code>css_set</code> can belong to tasks from multiple <code>cgroup</code>s (see 4). Conversely, a <code>cgroup</code> may have several tasks, each using different <code>cset</code>s. Hence, we observe a N:M relationship between <code>cgroup</code> and <code>css_set</code>. Each <code>cgrp_cset_link</code> references a <code>cgroup</code> and a <code>css_set</code>, entailing a relationship between them.</p>
+</li>
+</ol>
+<p>Few things to clear up before we move ahead:</p>
+<ul>
+<li>
+<p>Even in cgroup v2, we have possibility of using subsystems that don&rsquo;t support v2 to bind to v1 hierarchy, or any subsystem not bound to v2 can be bound to v1 hierarchies. This is why we still have the multiple hierarchies and the nuances. Further, a <code>default hierarchy</code> is introduced in v2 implementation, which is the generic unified v2 hierarchy<cite><sup id=fnref:6><a href=#fn:6 class=footnote-ref role=doc-noteref>6</a></sup></cite>. Moreover, <code>css_set</code> has a field <code>dfl_cgrp</code>, if <code>css_set</code> ever gets linked to a cgroup in default hierarchy, the cgroup is assigned to it (in v2)</p>
+</li>
+<li>
+<p>We may wonder now when are the two <code>cset</code>s considered to be the &ldquo;same&rdquo; (see 4). <a href=https://github.com/microsoft/WSL2-Linux-Kernel/blob/linux-msft-wsl-5.15.y/kernel/cgroup/cgroup.c#L1003>linux-msft-wsl-5.15.y/kernel/cgroup/cgroup.c#L1003</a> pretty much lays it out. Check if subsystems are the same, domains cgroups match, cgroups they are linked to match (with exception of when both <code>css_set</code> are on destination hierarchy, in that case, the candidate <code>css_set</code> should be associated with the destination <code>cgroup</code>). I still don&rsquo;t know why the ordered comparison works tho.</p>
+</li>
+</ul>
+<p>After this info dump, we can finally try tackling the execution flow (which turns out not all that important later&mldr;). So referring back to the <code>cgroup_update_dfl_csses</code>, we see that</p>
+<script src="https://emgithub.com/embed-v2.js?target=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FWSL2-Linux-Kernel%2Fblob%2Flinux-msft-wsl-5.15.y%2Fkernel%2Fcgroup%2Fcgroup.c%23L3005-L3013&style=dark&type=code&showBorder=on&showFileMeta=on&showFullPath=on&showCopy=on&showLineNumbers=on"></script>
+<p>All <code>css</code>es in the subtree are traversed, and are recorded for the migration information. This information is appended to the <code>css.mg_src_cgrp</code> and <code>css.mg_dst_cgrp</code> to record source and destination cgroups of migration and the <code>mgctx</code> has <code>preload_src_csets</code> field to link together the <code>mg_src_preload_node</code> linkedlist heads</p>
+<p>After a write synchronization with threadgroups, <code>cgroup_migrate_prepare_dst</code> is called</p>
+<script src="https://emgithub.com/embed-v2.js?target=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FWSL2-Linux-Kernel%2Fblob%2Flinux-msft-wsl-5.15.y%2Fkernel%2Fcgroup%2Fcgroup.c%23L2735-L2795&style=dark&type=code&showBorder=on&showFileMeta=on&showFullPath=on&showCopy=on&showLineNumbers=on"></script>
+<p>This procedure was bit of a weirdo one, because of a weird dependency in object manipulation being used here
+From a glance we see that <code>cset</code>s loaded in migration context are traversed through and associated destination sets fetched from <code>find_css_set</code>. I ignored it at first since I could not see how will it be decided if a new cset is to be created or not, which was bit of a mistake since later on this renders me a bit more clueless. I will do same in this blog post for now.</p>
+<p>So, <code>dst_cset</code> and <code>src_cset</code> are compared to check if both turn out to be same and removed from the migration context if it&rsquo;s true, <code>dst_cset</code> is added to the migration context&rsquo;s destination cset node list, and finally, we check if there is a subsystem change and alter the migration context&rsquo;s <code>ss_mask</code> to indicate a subsystem change</p>
+<p>Then, <code>cgroup_migrate_add_task</code> is called on and all <code>cset</code> nodes in migration context source nodes are checked for tasks and added to a <code>taskset</code></p>
+<script src="https://emgithub.com/embed-v2.js?target=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FWSL2-Linux-Kernel%2Fblob%2Flinux-msft-wsl-5.15.y%2Fkernel%2Fcgroup%2Fcgroup.c%23L2735-L2795&style=dark&type=code&showBorder=on&showFileMeta=on&showFullPath=on&showCopy=on&showLineNumbers=on"></script>
+<p>There is nothing noteworthy here. We finally see the actual migration occuring in the call to <code>cgroup_migrate_execute</code></p>
+<script src="https://emgithub.com/embed-v2.js?target=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FWSL2-Linux-Kernel%2Fblob%2Flinux-msft-wsl-5.15.y%2Fkernel%2Fcgroup%2Fcgroup.c%23L2514-L2534&style=dark&type=code&showBorder=on&showFileMeta=on&showFullPath=on&showCopy=on&showLineNumbers=on"></script>
+<p>The code portion performs subsystem checks to be sure that this operation will not fail when actual migration is performed. <code>mgctx->ss_mask</code>, which held the bits for the subsystem changes is seen here too. Since I added only a <code>+cpu</code> to <code>subtree_control</code> file, it is obvious that <code>ss->can_attach</code> is referencing the <code>cpu</code> controller. Which for some reason fails, and we finally see the cause of the invalid argument error,</p>
+<script src="https://emgithub.com/embed-v2.js?target=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FWSL2-Linux-Kernel%2Fblob%2Flinux-msft-wsl-5.15.y%2Fkernel%2Fsched%2Fcore.c%23L10036-L10065&style=dark&type=code&showBorder=on&showFileMeta=on&showFullPath=on&showCopy=on&showLineNumbers=on"></script>
+<p>My obvious guess was there is something wrong with RT scheduling so I compiled the kernel turning it off and very well the problem was no more there. Further looking around leads me to <a href=https://docs.kernel.org/scheduler/sched-rt-group.html#default-behaviour>this documentation</a> which mentions that by default new groups get runtime of 0. I kinda didn&rsquo;t realize that I just stumbled on an almost-answer, and I kept pushing on through source code</p>
+<script src="https://emgithub.com/embed-v2.js?target=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FWSL2-Linux-Kernel%2Fblob%2Flinux-msft-wsl-5.15.y%2Fkernel%2Fsched%2Frt.c%23L2774-L2781&style=dark&type=code&showBorder=on&showFileMeta=on&showFullPath=on&showCopy=on&showLineNumbers=on"></script>
+<p>Turns out, the runtime period allocated in this <code>task_group</code> is zero. At this point I probed the functions that create <code>task_group</code>s and noticed they were created down in the call to <code>cgroup_control_apply_enable</code>. Now I had to step back a bit, and see the <code>css</code> allocations</p>
+<script src="https://emgithub.com/embed-v2.js?target=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FWSL2-Linux-Kernel%2Fblob%2Flinux-msft-wsl-5.15.y%2Fkernel%2Fcgroup%2Fcgroup.c%23L3174-L3205&style=dark&type=code&showBorder=on&showFileMeta=on&showFullPath=on&showCopy=on&showLineNumbers=on"></script>
+<p>Very straightforward, <code>cgroup</code>s in hierarchy are checked for if they have some <code>css</code> associated with them, and otherwise <code>css_create</code> is called</p>
+<script src="https://emgithub.com/embed-v2.js?target=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FWSL2-Linux-Kernel%2Fblob%2Flinux-msft-wsl-5.15.y%2Fkernel%2Fcgroup%2Fcgroup.c%23L5350-L5394&style=dark&type=code&showBorder=on&showFileMeta=on&showFullPath=on&showCopy=on&showLineNumbers=on"></script>
+<p>There&rsquo;s more to the procedure but it does not matter for the discussion. <code>ss->css_alloc</code> is called, which will rightfully allocate a <code>css</code> associated with the <code>cpu</code> controller. Following path the execution flow we encounter this,</p>
+<script src="https://emgithub.com/embed-v2.js?target=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FWSL2-Linux-Kernel%2Fblob%2Flinux-msft-wsl-5.15.y%2Fkernel%2Fsched%2Frt.c%23L194-L210&style=dark&type=code&showBorder=on&showFileMeta=on&showFullPath=on&showCopy=on&showLineNumbers=on"></script>
+<p>Aha! So the task groups are created with <code>rt_period</code> of zero!</p>
+<p>To find how <code>find_css_set</code> works, we need to note the control propagation, where the change to <code>subtree_control</code> of a <code>cgroup</code>,</p>
+<script src="https://emgithub.com/embed-v2.js?target=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FWSL2-Linux-Kernel%2Fblob%2Flinux-msft-wsl-5.15.y%2Fkernel%2Fcgroup%2Fcgroup.c%23L3426&style=dark&type=code&showBorder=on&showLineNumbers=on&showFileMeta=on&showFullPath=on&showCopy=on"></script>
+<p>are propagated</p>
+<script src="https://emgithub.com/embed-v2.js?target=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FWSL2-Linux-Kernel%2Fblob%2Flinux-msft-wsl-5.15.y%2Fkernel%2Fcgroup%2Fcgroup.c%23L3116-L3127&style=dark&type=code&showBorder=on&showLineNumbers=on&showFileMeta=on&showFullPath=on&showCopy=on"></script>
+<p>In <code>find_css_set</code> procedure, a call is made to <code>find_existing_css_set</code>, which takes old <code>css_set</code>, the hierarchy is it gonna be transfered to and a <code>template</code></p>
+<script src="https://emgithub.com/embed-v2.js?target=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FWSL2-Linux-Kernel%2Fblob%2Flinux-msft-wsl-5.15.y%2Fkernel%2Fcgroup%2Fcgroup.c%23L1216-L1220&style=dark&type=code&showBorder=on&showLineNumbers=on&showFileMeta=on&showFullPath=on&showCopy=on"></script>
+<p>A look into the <code>find_existing_css_set</code> shows some calls, to <code>cgroup_e_css_by_mask</code> procedure</p>
+<script src="https://emgithub.com/embed-v2.js?target=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FWSL2-Linux-Kernel%2Fblob%2Flinux-msft-wsl-5.15.y%2Fkernel%2Fcgroup%2Fcgroup.c%23L1077-L1124&style=dark&type=code&showBorder=on&showLineNumbers=on&showFileMeta=on&showFullPath=on&showCopy=on"></script>
+<p>This procedure returns the effective <code>css</code> for the <code>cgroup</code> based on the <code>ss</code> subsystem object. This procedure is dependent on the update propagation of the flags earlier, which sounds a bit bizarre way to handle this situation. But at least there were comments throughout source code to help me figure this out!</p>
+<p>And with that, we have the root cause figured out, the allocated cgroup&rsquo;s <code>cset</code> all seem to have have taskgroup with runtime of zero. At this point I finally tried googling about it and as it turns out it was <a href=https://docs.kernel.org/admin-guide/cgroup-v2.html#cpu>already mentioned</a> in the docs. Which while felt a bit dumb of an oversight on my part</p>
+<h2 id=and-thats-it>And&mldr; that&rsquo;s it!
+<span>
+<a href=#and-thats-it><svg viewBox="0 0 28 23" height="100%" width="19" xmlns="http://www.w3.org/2000/svg"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" fill="none" stroke-linecap="round" stroke-miterlimit="10" stroke-width="2"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" fill="none" stroke-linecap="round" stroke-miterlimit="10" stroke-width="2"/></svg>
+</a>
+</span>
+</h2><p>Well of course not.. I tried to find discussions regarding what&rsquo;s up with status of support for real time processes. Tejun Heo seems to be mainly managing cgroup-v2 and I could not find any further discussions about it. Fixing it would probably call for lot of heuristics, since realtime scheduling knobs act as an absolute slice of total CPU time, and hence cannot be composed easily in a regular manner<cite><sup id=fnref:7><a href=#fn:7 class=footnote-ref role=doc-noteref>7</a></sup></cite>.</p>
+<p>Nonetheless, I did find something funny, Linux nerds left on the wild in internet space,</p>
+<p><img src=/images/linux_user_funny.png alt></p>
+<p>Time to study for exams ig. Laters!</p>
+<section class=footnotes role=doc-endnotes>
+<hr>
+<ol>
+<li id=fn:1 role=doc-endnote>
+<p><a href=https://www.kernel.org/doc/html/v5.13/admin-guide/cgroup-v2.html>Control Group v2</a>&#160;<a href=#fnref:1 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:2 role=doc-endnote>
+<p><a href=https://man7.org/linux/man-pages/man1/trace-cmd.1.html>trace-cmd</a>&#160;<a href=#fnref:2 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:3 role=doc-endnote>
+<p><a href=https://docs.kernel.org/trace/kprobes.html>Kprobes</a>&#160;<a href=#fnref:3 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:4 role=doc-endnote>
+<p><a href=https://0xax.gitbooks.io/linux-insides/content/Concepts/linux-cpu-4.html>Linux insides - Notification Chains in Linux Kernel</a>&#160;<a href=#fnref:4 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:5 role=doc-endnote>
+<p><a href=https://docs.kernel.org/admin-guide/cgroup-v1/cgroups.html_>Control Group v1</a>&#160;<a href=#fnref:5 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:6 role=doc-endnote>
+<p><a href=https://github.com/microsoft/WSL2-Linux-Kernel/blob/linux-msft-wsl-5.15.y/kernel/cgroup/cgroup.c#L266-L312>kernel/cgroup/cgroup.c:cgroup_on_dfl</a>&#160;<a href=#fnref:6 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:7 role=doc-endnote>
+<p><a href=https://docs.kernel.org/scheduler/sched-rt-group.html#basis-for-grouping-tasks>Real-Time Group Scheduling</a>&#160;<a href=#fnref:7 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+</ol>
+</section>
+</div>
+<div class=post-info>
+<div class="post-date dt-published">
+<a class=u-url href=/post/cgroup_rt/><time datetime=2023-11-28>2023-11-28</time></a>
+</div>
+<a class="post-hidden-url u-url" href=https://thiazikara.github.io/post/cgroup_rt/>https://thiazikara.github.io/post/cgroup_rt/</a>
+<a href=https://thiazikara.github.io class="p-name p-author post-hidden-author h-card" rel=me>Deepak Sharma</a>
+<div class=post-taxonomies>
+<ul class=post-tags>
+<li><a href=https://thiazikara.github.io/tags/linux/>#linux</a></li>
+<li><a href=https://thiazikara.github.io/tags/linux-kernel/>#linux kernel</a></li>
+<li><a href=https://thiazikara.github.io/tags/debugging/>#debugging</a></li>
+<li><a href=https://thiazikara.github.io/tags/lesson/>#lesson</a></li>
+</ul>
+</div>
+</div>
+</article>
+<div class="pagination post-pagination">
+<div class="left pagination-item disabled">
+</div>
+<div class="right pagination-item">
+<a href=/post/flp/>Impossibility of Distributed Consensus with one faulty process</a>
+</div>
+</div>
+<div id=disqus_thread></div>
+<script type=application/javascript>var disqus_config=function(){};(function(){if(["localhost","127.0.0.1"].indexOf(window.location.hostname)!=-1){document.getElementById('disqus_thread').innerHTML='Disqus comments not available by default when the website is previewed locally.';return}var b=document,a=b.createElement('script');a.async=!0,a.src='//corte-1.disqus.com/embed.js',a.setAttribute('data-timestamp',+new Date),(b.head||b.body).appendChild(a)})()</script>
+<noscript>Please enable JavaScript to view the <a href=https://disqus.com/?ref_noscript>comments powered by Disqus.</a></noscript>
+<a href=https://disqus.com class=dsq-brlink>comments powered by <span class=logo-disqus>Disqus</span></a>
+</main>
+<footer class=common-footer>
+<div class=common-footer-bottom>
+<div class=copyright>
+<p>© Deepak Sharma, 2023<br>
+</p>
+</div>
+<button class=theme-switcher>
+Dark theme
+</button>
+<script>const STORAGE_KEY='user-color-scheme',defaultTheme="auto";let currentTheme,switchButton,autoDefinedScheme=window.matchMedia('(prefers-color-scheme: dark)');const autoChangeScheme=a=>{currentTheme=a.matches?'dark':'light',document.documentElement.setAttribute('data-theme',currentTheme),changeButtonText()};document.addEventListener('DOMContentLoaded',function(){switchButton=document.querySelector('.theme-switcher'),currentTheme=detectCurrentScheme(),currentTheme=='dark'&&document.documentElement.setAttribute('data-theme','dark'),currentTheme=='auto'&&(autoChangeScheme(autoDefinedScheme),autoDefinedScheme.addListener(autoChangeScheme)),switchButton&&(changeButtonText(),switchButton.addEventListener('click',switchTheme,!1)),showContent()});function detectCurrentScheme(){return localStorage!==null&&localStorage.getItem(STORAGE_KEY)?localStorage.getItem(STORAGE_KEY):defaultTheme?defaultTheme:window.matchMedia?window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light':'light'}function changeButtonText(){switchButton&&(switchButton.textContent=currentTheme=='dark'?"Light theme":"Dark theme")}function switchTheme(a){currentTheme=='dark'?(localStorage!==null&&localStorage.setItem(STORAGE_KEY,'light'),document.documentElement.setAttribute('data-theme','light'),currentTheme='light'):(localStorage!==null&&localStorage.setItem(STORAGE_KEY,'dark'),document.documentElement.setAttribute('data-theme','dark'),currentTheme='dark'),changeButtonText()}function showContent(){document.body.style.visibility='visible',document.body.style.opacity=1}</script>
+</div>
+</footer>
+</div>
+</body>
+</html>
